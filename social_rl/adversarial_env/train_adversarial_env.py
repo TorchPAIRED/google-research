@@ -346,6 +346,15 @@ def train_eval(
     else:
       adversary_env = agents['adversary_env']
 
+    from social_rl.diayn.diayn import CEDiayn
+    def create_diayn(): # todo make diayn type an arg
+        return CEDiayn(50, num_parallel_envs, tf_env.observation_spec(), actor_fc_layers, conv_filters=8,
+                           conv_kernel=3, scalar_fc=5, train_on_trajectory=True)
+    allied_diayn = create_diayn()
+    ennemy_diayn = create_diayn()
+    from social_rl.diayn.no_diayn import NoDiayn
+    no_diayn = NoDiayn(50, num_parallel_envs, False)
+
     collect_driver = adversarial_driver.AdversarialDriver(
         tf_env,
         agents['agent'],
@@ -356,7 +365,11 @@ def train_eval(
         disable_tf_function=True,  # TODO(natashajaques): enable tf functions
         debug=debug,
         combined_population=combined_population,
-        flexible_protagonist=flexible_protagonist)
+        flexible_protagonist=flexible_protagonist,
+        allied_diayn=allied_diayn,
+        ennemy_diayn=ennemy_diayn,
+        no_diayn=no_diayn
+    )
     eval_driver = adversarial_driver.AdversarialDriver(
         eval_tf_env,
         agents['agent'],

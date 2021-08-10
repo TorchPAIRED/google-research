@@ -50,7 +50,11 @@ class AdversarialDriver(object):
                disable_tf_function=False,
                debug=False,
                combined_population=False,
-               flexible_protagonist=False):
+               flexible_protagonist=False,
+               allied_diayn=None,
+               ennemy_diayn=None,
+               no_diayn=None
+               ):
     """Runs the environment adversary and agents to collect episodes.
 
     Args:
@@ -92,6 +96,10 @@ class AdversarialDriver(object):
     self.combined_population = combined_population
     self.flexible_protagonist = flexible_protagonist
 
+    self.allied_diayn = allied_diayn
+    self.ennemy_diayn = ennemy_diayn
+    self.no_diayn = no_diayn
+
   def run(self, random_episodes=False):
     """Runs 3 policies in same environment: environment, agent 1, agent 2."""
 
@@ -119,18 +127,18 @@ class AdversarialDriver(object):
     """Episode in which adversary constructs environment and agents play it."""
     # Build environment with adversary.
     _, _, env_idx = self.run_agent(
-        self.env, self.adversary_env, self.env.reset, self.env.step_adversary)
+        self.env, self.adversary_env, self.env.reset, self.env.step_adversary, self.no_diayn)
     train_idxs = {'adversary_env': [env_idx]}
 
     # Run protagonist in generated environment.
     agent_r_avg, agent_r_max, agent_idx = self.run_agent(
-        self.env, self.agent, self.env.reset_agent, self.env.step)
+        self.env, self.agent, self.env.reset_agent, self.env.step, self.allied_diayn)
     train_idxs['agent'] = [agent_idx]
 
     # Run antagonist in generated environment.
     if self.adversary_agent:
       adv_agent_r_avg, adv_agent_r_max, antag_idx = self.run_agent(
-          self.env, self.adversary_agent, self.env.reset_agent, self.env.step)
+          self.env, self.adversary_agent, self.env.reset_agent, self.env.step, self.ennemy_diayn)
       train_idxs['adversary_agent'] = [antag_idx]
 
     # Use agents' reward to compute and set regret-based rewards for PAIRED.
@@ -188,7 +196,7 @@ class AdversarialDriver(object):
     """Episode in which adversary constructs environment and agents play it."""
     # Build environment with adversary.
     _, _, env_idx = self.run_agent(
-        self.env, self.adversary_env, self.env.reset, self.env.step_adversary)
+        self.env, self.adversary_env, self.env.reset, self.env.step_adversary, self.no_diayn)
     train_idxs = {'adversary_env': [env_idx], 'agent': []}
 
     # Run all protagonist agents in generated environment.
@@ -196,7 +204,7 @@ class AdversarialDriver(object):
     maxs = []
     for agent_idx in range(len(self.agent)):
       agent_r_avg, agent_r_max, agent_idx_selected = self.run_agent(
-          self.env, self.agent, self.env.reset_agent, self.env.step,
+          self.env, self.agent, self.env.reset_agent, self.env.step, self.allied_diayn,
           agent_idx=agent_idx)
       assert agent_idx == agent_idx_selected
       means.append(agent_r_avg)
@@ -281,7 +289,7 @@ class AdversarialDriver(object):
 
     # Run single agent.
     agent_r_avg, agent_r_max, agent_idx = self.run_agent(
-        self.env, self.agent, self.env.reset_agent, self.env.step)
+        self.env, self.agent, self.env.reset_agent, self.env.step, self.allied_diayn)
     train_idxs = {'agent': [agent_idx]}
 
     if self.debug:
@@ -298,13 +306,13 @@ class AdversarialDriver(object):
 
     # Run protagonist agent.
     agent_r_avg, agent_r_max, agent_idx = self.run_agent(
-        self.env, self.agent, self.env.reset_agent, self.env.step)
+        self.env, self.agent, self.env.reset_agent, self.env.step, self.allied_diayn)
     train_idxs = {'agent': [agent_idx]}
 
     # Run antagonist agent.
     if self.adversary_agent:
       adv_agent_r_avg, adv_agent_r_max, antag_idx = self.run_agent(
-          self.env, self.adversary_agent, self.env.reset_agent, self.env.step)
+          self.env, self.adversary_agent, self.env.reset_agent, self.env.step, self.ennemy_diayn)
       train_idxs['adversary_agent'] = [antag_idx]
 
     # Use agents' reward to compute and set regret-based rewards for PAIRED.
@@ -325,7 +333,7 @@ class AdversarialDriver(object):
 
     return agent_r_max, train_idxs
 
-  def run_agent(self, env, agent_list, reset_func, step_func, agent_idx=None):
+  def run_agent(self, env, agent_list, reset_func, step_func, diayn, agent_idx=None):
     """Runs an agent in an environment given a step and reset function.
 
     Args:
@@ -352,8 +360,9 @@ class AdversarialDriver(object):
       policy = agent.eval_policy
       observers = agent.eval_metrics
 
-    time_step = reset_func()
+    time_step = reset_func()  # equivalent to env.reset()
     policy_state = policy.get_initial_state(env.batch_size)
+    time_step = diayn.reset(time_step)  # generates new Zs, augments the timestep
 
     num_steps = tf.constant(0.0)
     num_episodes = tf.zeros_like(time_step.reward)
@@ -363,7 +372,8 @@ class AdversarialDriver(object):
 
     while num_steps < agent.max_steps:
       action_step = policy.action(time_step, policy_state)
-      next_time_step = step_func(action_step.action)
+      next_time_step = step_func(action_step.action)  # equivalent to env.step()
+      next_time_step = diayn.score_and_augment(next_time_step)  # scores the step, changing its reward, and then adds Z to the obs
 
       # Replace with terminal timestep to manually end episode (enables
       # artificially decreasing number of steps for one of the agents).
