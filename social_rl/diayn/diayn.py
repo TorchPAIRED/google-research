@@ -15,12 +15,11 @@ class CEDiayn(AbstractDiayn):
         super().__init__(train_on_trajectory=train_on_trajectory, n_skills=n_skills, n_envs=n_envs)
 
         from social_rl.multiagent_tfagents import multigrid_networks
-        (self.actor_net,
-         self.value_net) = multigrid_networks.construct_multigrid_networks(
+        self.net = multigrid_networks.construct_multigrid_networks(
             obs_spec, action_spec, use_rnns=False,
             actor_fc_layers=actor_fc_layers, value_fc_layers=actor_fc_layers,
             lstm_size=None, conv_filters=conv_filters,
-            conv_kernel=conv_kernel, scalar_fc=scalar_fc)
+            conv_kernel=conv_kernel, scalar_fc=scalar_fc, just_encoder=True)
 
         self.forward_loss = keras.losses.SparseCategoricalCrossentropy(reduction="none", from_logits=False)
         self.backward_loss = keras.losses.SparseCategoricalCrossentropy(from_logits=False)
@@ -32,7 +31,7 @@ class CEDiayn(AbstractDiayn):
         self.n_skills = n_skills
 
     def score_and_augment(self, timestep, as_one_hot=True):
-        vals = self.actor_net.predict(timestep)
+        vals = self.net.call(timestep.observation, timestep.step_type, tuple(), training=False)
 
         score = self.forward_loss(self.z, timestep.observation)
         return timestep

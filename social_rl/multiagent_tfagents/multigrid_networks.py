@@ -67,7 +67,8 @@ def construct_multigrid_networks(observation_spec,
                                  scalar_name='direction',
                                  scalar_dim=4,
                                  random_z=False,
-                                 xy_dim=None):
+                                 xy_dim=None,
+                                 just_encoder=False):
   """Creates an actor and critic network designed for use with MultiGrid.
 
   A convolution layer processes the image and a dense layer processes the
@@ -155,6 +156,10 @@ def construct_multigrid_networks(observation_spec,
         preprocessing_combiner=preprocessing_combiner,
         fc_layer_params=value_fc_layers,
         activation_fn=tf.keras.activations.tanh)
+
+    if just_encoder:
+      assert use_rnns is False
+      return actor_net._encoder
 
   return actor_net, value_net
 
