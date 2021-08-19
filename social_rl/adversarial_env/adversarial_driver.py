@@ -379,6 +379,10 @@ class AdversarialDriver(object):
       num_steps += 1
       num_episodes += tf.cast(traj.is_last(), tf.float32)
 
+      #i = next_time_step.reward.numpy().sum()
+     # if next_time_step.reward.numpy().sum() != 0:
+      # i=0
+
       avg_reward += next_time_step.reward
       max_reward = tf.math.maximum(max_reward, next_time_step.reward)
 
